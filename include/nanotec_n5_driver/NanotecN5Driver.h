@@ -4,6 +4,7 @@
 #include <string>
 #include <cstring>
 #include <std_msgs/Float64.h>
+#include <math.h>
 
 #include <nanotec_n5_driver/NanotecN5Port.h>
 
@@ -143,16 +144,20 @@
 #define NORMAL_STOP	 1  // --> SWITCH ON DISABLED OR READY TO SWITCH ON
 
 // Protocol parameters 
+#define SPEED_NUMERATOR_CONST 	53    // 53 = (48 *1.116) Vou/Vin ratio
+#define SPEED_DENOMINATOR_CONST	240  // time unit (each 4 min)
+
+
 
 # define CANOPEN_SDO_MAX_FRAME_SIZE	20 // 
 // Time 
-#define CANOPEN_MIN_DELAY	3 // [ms] - min delay between writing and the relpy from the driver
+#define CANOPEN_MIN_DELAY	5 // [ms] - min delay between writing and the relpy from the driver
 
 
 // Motor Settings
 #define GEAR_RATIO  48
 #define DISTANCE_BETWEEN_AXES 0.75
-#define TIRE_PERIMETER 1.303
+
 namespace nanotec
 {
   
@@ -216,11 +221,11 @@ namespace nanotec
     
     void configOperationMode(u_int8_t mode);
     
-    int setTargetVelocity(int32_t value);
+    int setTargetVelocity(double value);
     
-    int getActualVelocity(void);
+    double getActualVelocity(void);
     
-    
+   
   private:
     
     nanotec::NanotecN5Port * node_;
@@ -230,5 +235,5 @@ namespace nanotec
     
 }
 
-
+ int hex2int(int value);
 #endif // NANOTECN5DRIVER_H

@@ -136,7 +136,7 @@ bool nanotec::NanotecN5Driver::ReadObject ( u_int16_t index, u_int8_t subIndex,c
     char data_big_endian[13]={0,0,0,0,0,0,0,0,0,0,0,0,0};
     std::ostringstream aux_cpy;
     char cob_id_reply_str[3];
-    char index_subindex_reply_str[3];
+    char index_subindex_reply_str[5];
     std::string cob_id_str;
     
     message_to_send << 't';
@@ -177,8 +177,9 @@ bool nanotec::NanotecN5Driver::ReadObject ( u_int16_t index, u_int8_t subIndex,c
      strncpy(cob_id_reply_str,&reply[3],5);
      cob_id_reply_str[3]='\0';
      
-     //printf("COB-ID: %s\n",cob_id_str.c_str());
-     //printf("COB-ID:\n %s\n",cob_id_reply_str);
+     //printf("[DEBUG] COB-ID: %s\n",cob_id_str.c_str());
+     //printf("[DEBUG] COB-ID replay: %s\n",cob_id_reply_str);
+    
      
      // Compare COB-ID
      if(strcmp(cob_id_reply_str,cob_id_str.c_str())!=0)
@@ -186,6 +187,8 @@ bool nanotec::NanotecN5Driver::ReadObject ( u_int16_t index, u_int8_t subIndex,c
 	printf("\n[ERROR] - Reply COB-ID doesn't match\n");
 	printf("\n[DEBUG] ReadObject: \n");
 	printf("%s",reply);
+	
+     
 	return false;
      }
      
@@ -201,8 +204,10 @@ bool nanotec::NanotecN5Driver::ReadObject ( u_int16_t index, u_int8_t subIndex,c
      
      //Extract INDEX and Subindex from reply frame
      strncpy((char *)index_subindex_reply_str,&reply[9],6);
-     //printf("Index Subindex: %s\n", index_subindex_str.c_str());
-     //printf("Index Subindex: %s\n",index_subindex_reply_str);
+     
+     
+     //printf("[DEBUG] Index Subindex: %s\n", index_subindex_str.c_str());
+     //printf("[DEBUG] Index Subindex reply: %s\n",index_subindex_reply_str);
      
      //Compare Index and Subindex
      if(strcmp(index_subindex_reply_str,index_subindex_str.c_str())!=0)
@@ -214,7 +219,6 @@ bool nanotec::NanotecN5Driver::ReadObject ( u_int16_t index, u_int8_t subIndex,c
      }
     
      //printf("\n * Reply frame match\n");
-     
      // Extract data (originally - little-endian) and convert data to big-endain format ----- ----- ----- ----- ----- ----- -----  ----- -----
      
     char aux[2]={0,0};
@@ -243,6 +247,9 @@ bool nanotec::NanotecN5Driver::ReadObject ( u_int16_t index, u_int8_t subIndex,c
    
    return true;
 }
+
+
+
 
 
 int nanotec::NanotecN5Driver::stateMachine(int direction, int stop,int clearfault)
@@ -454,9 +461,9 @@ int nanotec::NanotecN5Driver::setUserDefinedUnits(void)
   WriteObject(CANOPEN_GEAR_RATIO,0x01,MESSAGE_SIZE_4,data);
   
   // Feed Constant (Wheel perimeter)
-  data=(int32_t)(TIRE_PERIMETER*1000); // Perimeter of the wheel
+  data=(int32_t)1;//(TIRE_PERIMETER*1000); // Perimeter of the wheel
   WriteObject(CANOPEN_FEED_CONSTANT, 0x01, MESSAGE_SIZE_4, data);
-  data =(int32_t)1000;
+  data =(int32_t)1;//1000;
   WriteObject(CANOPEN_FEED_CONSTANT, 0x02, MESSAGE_SIZE_4, data);
   
   //Position encoder resolution
@@ -469,9 +476,9 @@ int nanotec::NanotecN5Driver::setUserDefinedUnits(void)
   
   // Speed factor
   // n_v = NUMERATOR/DEMOMINATOR (r/s)
-  data=(int32_t)1; 
+  data=(int32_t)SPEED_NUMERATOR_CONST; 
   WriteObject(CANOPEN_VELOCITY_NUMERATOR, 0x00, MESSAGE_SIZE_4, data);
-  data =(int32_t)1;
+  data =(int32_t)SPEED_DENOMINATOR_CONST;
   WriteObject(CANOPEN_VELOCITY_DENOMINATOR, 0x00, MESSAGE_SIZE_4, data);
   // Acceleration factor
   //n_a = NUMERATOR/DEMOMINATOR (r/s^2)
@@ -500,8 +507,6 @@ int nanotec::NanotecN5Driver::loadDefaultSettings(void)
   setOperatingMode(CANOPEN_PROFILE_VELOCITY_MODE);
   return 1;
 }
-
-
 
 
 
@@ -565,30 +570,44 @@ void nanotec::NanotecN5Driver::configOperationMode(u_int8_t mode)
 
 
 
-int nanotec::NanotecN5Driver::setTargetVelocity(int32_t value)
+int nanotec::NanotecN5Driver::setTargetVelocity(double value)
 {
   char data[100];
-  if(WriteObject(CANOPEN_TARGET_VELOCITY, 0x00, MESSAGE_SIZE_4, value))
+  char value_str_hex[100];
+  int32_t input = (int32_t)round(value * SPEED_DENOMINATOR_CONST);
+  // concerting int -> hex
+  sprintf(value_str_hex,"%x",input);
+  if(WriteObject(CANOPEN_TARGET_VELOCITY, 0x00, MESSAGE_SIZE_4,input))
      if(ReadObject(CANOPEN_TARGET_VELOCITY,0x00,data))
-       if(value == atoi(data))
+       if(strcmp(value_str_hex,data))
        {
-	 //printf("\n[INFO] - Target velocity was writen\n");
+	   
+	 //printf("\n[DEBUG] - Target velocity was writen\n");
 	 return 1;
        }
-  printf("\n [ERROR] -  Target velocity was not writen: %s\n",data);     
+   printf("\n [ERROR] -  Target velocity was not writen: %s %d %lf %s\n",data,input,(value*SPEED_DENOMINATOR_CONST),value_str_hex);
   return 0;
 }
 
 
 
-
-
-int nanotec::NanotecN5Driver::getActualVelocity(void)
+double nanotec::NanotecN5Driver::getActualVelocity(void)
 {
   char data[100];
   int data_hex;
-  ReadObject(CANOPEN_TARGET_VELOCITY,0x00,data);
+  ReadObject(CANOPEN_VELOCITY_ACTUAL_VALUE,0x00,data);
   std::istringstream data_str(data);
-  data_str >> std::setbase(16) >> data_hex;
-  return(data_hex);
+  
+  data_str >>std::hex >> (data_hex);
+  return((double)hex2int(data_hex)/SPEED_DENOMINATOR_CONST);
+}
+
+
+int hex2int(int value)
+{
+  if( value > 0x7FFFFF)
+  {
+    return (0x1000000 - value);
+  }
+  return(value);
 }
